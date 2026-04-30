@@ -1,0 +1,34 @@
+# FastAPI & Server
+fastapi
+uvicorn[standard]
+
+# LangChain Core
+langchain
+langchain-core
+langchain-postgres
+langchain-text-splitters
+langchain-classic
+
+# LangChain Integrations
+langchain-openai
+langchain-groq
+langchain-huggingface
+
+# Vector Store
+pgvector
+psycopg[binary]
+
+# Document Parsing (Docling)
+docling
+docling-core
+
+# Embeddings / HuggingFace
+transformers
+sentence-transformers
+huggingface-hub
+
+# Environment
+python-dotenv
+
+# Pydantic (FastAPI dependency)
+pydantic
