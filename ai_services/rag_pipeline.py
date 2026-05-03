@@ -1,5 +1,5 @@
-import os, time
-import asyncio
+import os, time, asyncio, base64
+from sqlalchemy import create_engine, text
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
@@ -19,7 +19,7 @@ app = FastAPI()
 sPipeline = StorePipeline()
 col_name = "epson_collection"
 _retrieved_docs_store = {"docs": []}
-
+_retrieved_image_analyze = {"docs": []}
 class HistoryMessage(BaseModel):
     role: str
     content: str    
@@ -46,7 +46,7 @@ class ChatResponse(BaseModel):
     answer: str
     confidence_score: float
     sources: List[SourceItem]
-
+    image_analyses: List[str]
 #-- Helper
 
 def _build_lc_history(history: List[HistoryMessage]) -> List[HumanMessage | AIMessage]:
@@ -95,15 +95,31 @@ def analyze_image(image_url: str, query: str) -> str:
     """Analyze an image from URL to help answer user query about Epson products."""
     model = ChatGroq(
         groq_api_key=sPipeline.groq_api_key,
-        model_name="meta-llama/llama-4-scout-17b-16e-instruct"  # model vision groq
+        model_name="meta-llama/llama-4-scout-17b-16e-instruct"
     )
-    
+
+    # Cek apakah path lokal atau URL
+    if image_url.startswith("http://") or image_url.startswith("https://"):
+        # URL normal
+        image_content = {"type": "image_url", "image_url": {"url": image_url}}
+    else:
+        # Path lokal → convert ke base64
+        with open(image_url, "rb") as f:
+            image_data = base64.b64encode(f.read()).decode("utf-8")
+        
+        # Deteksi format gambar dari ekstensi
+        ext = image_url.split(".")[-1].lower()
+        mime_types = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
+        mime_type = mime_types.get(ext, "image/jpeg")
+        
+        image_content = {
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime_type};base64,{image_data}"}
+        }
+
     response = model.invoke([
         HumanMessage(content=[
-            {
-                "type": "image_url",
-                "image_url": {"url": image_url}
-            },
+            image_content,
             {
                 "type": "text",
                 "text": (
@@ -113,24 +129,24 @@ def analyze_image(image_url: str, query: str) -> str:
             }
         ])
     ])
-    
+    _retrieved_image_analyze["docs"].append(response.content)
     return response.content
 
 tools = [retrieve_context, analyze_image]
 
 #-- API Endpoints
-
-# @app.post("/chat", response_model=ChatResponse)
+@app.post("/chat", response_model=ChatResponse)
 async def message(req: ChatRequest):
     _retrieved_docs_store["docs"] = []
+    _retrieved_image_analyze["docs"] = []
 
     try:
         user_query = req.query
         # Compose prompt for LLM (system prompt as string, not ChatPromptTemplate)
         system_prompt = (
             "Kamu adalah asisten helpdesk Epson bernama Eppy."
-            "Gunakan tool retrieve_context untuk mencari informasi dari dokumen."
-            "Jika user mengirim gambar (image_url tersedia), gunakan tool analyze_image terlebih dahulu."
+            "Wajib menggunakan tool retrieve_context untuk mencari informasi dari dokumen."
+            "Jika user mengirim gambar (image_url tersedia), gunakan tool analyze_image"
             "Jawab HANYA berdasarkan hasil retrieve dan analisis gambar."
             "Jika tidak ditemukan, jawab: 'Maaf, saya tidak menemukan jawabannya di dokumen.'"
         )
@@ -150,9 +166,10 @@ async def message(req: ChatRequest):
         answer = response["messages"][-1].content
         retrieved_docs = _retrieved_docs_store["docs"]
         sources, confidence_score = _extract_sources_and_score(retrieved_docs)
+        image_analyses = _retrieved_image_analyze["docs"]
 
-        return {"answer": answer, "confidence_score": confidence_score, "sources": sources}
-    
+        return {"answer": answer, "confidence_score": confidence_score, "sources": sources, "image_analyses": image_analyses}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error_code": "LLM_ERROR", "message": str(e)})
 
@@ -175,9 +192,18 @@ async def delete_embed(article_id: str):
 @app.get("/health")
 async def health_check():
     try:
-        results = sPipeline.store.similarity_search("", k=1)
-        knowledge_count = len(sPipeline.store.similarity_search("", k=10000))
-    except:
+        engine = create_engine(sPipeline.db_url)
+        
+        with engine.connect() as conn:
+            # Hitung total chunks di collection
+            result = conn.execute(text("""
+                SELECT COUNT(*) 
+                FROM langchain_pg_embedding e
+                JOIN langchain_pg_collection c ON e.collection_id = c.uuid
+                WHERE c.name = :col_name
+            """), {"col_name": col_name})
+            knowledge_count = result.scalar()
+    except Exception:
         knowledge_count = 0
 
     return {
@@ -188,30 +214,39 @@ async def health_check():
 
 
 
-    
 # Example usage
-if __name__ == "__main__":
-    async def main():
-#         # await embed_document(EmbedRequest(
-#         #     article_id="id_article_2",
-#         #     title="DS-1730-12-13.pdf",
-#         #     file_path="example_documents/DS-1730-12-13.pdf"
-#         # ))
-#         await delete_embed("id_article_1")
-        response = await message(ChatRequest(
-            conversation_id="conv1",
-            query="Whats two methods are available for scanning various types of originals?",
-            history=[]
-        ))
-        print("\n" + "="*50)
-        print(f"ANSWER:\n{response['answer']}")
-        print(f"\nCONFIDENCE SCORE: {response['confidence_score']:.2f}")
-        print("\nSOURCES:")
-        for src in response['sources']:
-            print(f"  - [{src.header}] {src.title} (chunk {src.chunks_id})")
-            print(f"    {src.snippet[:100]}...")
-        print("="*50)
-    asyncio.run(main())
-    # chat_query = "Apa nama title dari prototype gamenya?"
-    # response = message(chat_query)
-    # print(response)
+# if __name__ == "__main__":
+#     async def main():
+        ## add & embedd doc test
+        # await embed_document(EmbedRequest(
+        #     article_id="id_article_2",
+        #     title="DS-1730-12-13.pdf",
+        #     file_path="example_documents/DS-1730-12-13.pdf"
+        # ))
+
+        ## delete doc test
+        # await delete_embed("id_article_1")
+
+        ## chat test
+        # response = await message(ChatRequest(
+        #     conversation_id="conv1",
+        #     query="Why the scanner epson ds-1730 error jamp paper?",
+        #     image_url="example_documents/error_paper_jamp.jpg",
+        #     history=[]
+        # ))
+        # print("\n" + "="*50)
+        # print(f"ANSWER:\n{response['answer']}")
+        # print(f"\nCONFIDENCE SCORE: {response['confidence_score']:.2f}")
+        # print("\nSOURCES:")
+        # for src in response['sources']:
+        #     print(f"  - [{src.header}] {src.title} (chunk {src.chunks_id})")
+        #     print(f"    {src.snippet[:100]}...")
+        # print("="*50)
+        # print("\nIMAGE ANALYSES:")
+        # for analysis in response['image_analyses']:
+            # print(f"  - {analysis}")
+
+        ## health check test
+        # health = await health_check()
+        # print(f"Health Check: {health}")
+    # asyncio.run(main())

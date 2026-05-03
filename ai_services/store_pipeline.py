@@ -227,8 +227,8 @@ class StorePipeline:
 
 
 # Example usage
-if __name__ == "__main__":
-    pipeline = StorePipeline()
+# if __name__ == "__main__":
+#     pipeline = StorePipeline()
 
     # parse = pipeline._parse_document("data/sample2.pdf")
     # chunk = pipeline.chunk_document(parse, "sample2.pdf")
