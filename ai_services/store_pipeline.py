@@ -11,7 +11,6 @@ from docling_core.transforms.serializer.markdown import MarkdownParams, Markdown
 from docling_core.types.doc.document import DoclingDocument, ImageRefMode, PictureDescriptionData, PictureItem
 
 from langchain_text_splitters import MarkdownHeaderTextSplitter
-from langchain_openai import OpenAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFaceEndpointEmbeddings
 from langchain_core.documents import Document
 from langchain_postgres.vectorstores import PGVector
@@ -29,6 +28,7 @@ connection = os.getenv("CONNECTION_STRING")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 HF_API_TOKEN = os.getenv("HF_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 class AnnotationPictureSerializer(MarkdownPictureSerializer):
     @override
@@ -82,21 +82,25 @@ class StorePipeline:
         self.pipeline_options = PdfPipelineOptions()
         self.pipeline_options.do_ocr = True
 
-        ## Example picture description options with a custom API (no money wkwk)
-        # self.pipeline_options.picture_description_options = PictureDescriptionApiOptions(
-        #     url="https://api.openai.com/v1/chat/completions",
-        #     headers={"Authorization": f"Bearer {self.api_key}"},
-        #     model="gpt-4o-mini",
-        #     scale=2.0,
-        # )
+        ## Example picture description options with a custom API
         
         self.pipeline_options.do_picture_description = True
-        # Alternative, a lightweight HuggingFace model for picture description
-        self.pipeline_options.picture_description_options = PictureDescriptionVlmOptions(
-            repo_id="HuggingFaceTB/SmolVLM-256M-Instruct",
-            # repo_id="HuggingFaceTB/SmolVLM2-2.2B-Instruct",
-            prompt="In this manual document for epson products, Analysis and Describe image in detail",
+        self.pipeline_options.picture_description_options = PictureDescriptionApiOptions(
+            url="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self.google_api_key}",
+            },
+            model="gemini-2.0-flash",
+            prompt="In this manual document for Epson products, analyze and describe the image in detail.",
+            timeout=30,
         )
+        
+        # Alternative, a lightweight HuggingFace model for picture description
+        # self.pipeline_options.picture_description_options = PictureDescriptionVlmOptions(
+        #     repo_id="HuggingFaceTB/SmolVLM-256M-Instruct",
+        #     # repo_id="HuggingFaceTB/SmolVLM2-2.2B-Instruct",
+        #     prompt="In this manual document for epson products, Analysis and Describe image in detail",
+        # )
         self.pipeline_options.generate_picture_images = True
         self.pipeline_options.images_scale = 2.0
 

@@ -4,11 +4,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 
-from transformers import pipeline
 from store_pipeline import StorePipeline
 from contextvars import ContextVar
 
-from langchain_openai import ChatOpenAI
 from langchain_groq import ChatGroq
 from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage

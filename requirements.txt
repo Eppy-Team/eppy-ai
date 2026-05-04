@@ -18,12 +18,16 @@ langchain-huggingface
 pgvector
 psycopg[binary]
 
-# Document Parsing (Docling)
-docling
+# Document Parsing
+docling-slim
 docling-core
+
+# Embeddings via API (tanpa torch/transformers lokal)
+huggingface-hub
 
 # Environment
 python-dotenv
 
-# Pydantic (FastAPI dependency)
+# Pydantic
 pydantic
+sqlalchemy
