@@ -47,8 +47,8 @@ class ChatResponse(BaseModel):
     confidence_score: float
     sources: List[SourceItem]
     image_analyses: List[str]
-#-- Helper
 
+#-- Helper
 def _build_lc_history(history: List[HistoryMessage]) -> List[HumanMessage | AIMessage]:
     message = []
     for msg in history:
@@ -78,7 +78,6 @@ def _extract_sources_and_score(retrieved_docs: list) -> tuple[List[SourceItem], 
     return sources, confidence_score
 
 #-- Tools
-
 @tool(response_format="content_and_artifact")
 def retrieve_context(query: str):
     """Retrieve information to help answer a query."""

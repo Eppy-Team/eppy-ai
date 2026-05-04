@@ -22,11 +22,6 @@ psycopg[binary]
 docling
 docling-core
 
-# Embeddings / HuggingFace
-transformers
-sentence-transformers
-huggingface-hub
-
 # Environment
 python-dotenv
 
