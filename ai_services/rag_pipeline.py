@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 
-from store_pipeline import StorePipeline
+from ai_services.store_pipeline import StorePipeline
 from contextvars import ContextVar
 
 from langchain_groq import ChatGroq
@@ -31,7 +31,7 @@ class ChatRequest(BaseModel):
 class EmbedRequest(BaseModel):
     article_id: str
     title: str
-    file_path: str
+    s3_url: str
 
 class SourceItem(BaseModel):
     article_id: str         # id dari artikel
@@ -139,7 +139,6 @@ async def message(req: ChatRequest):
 
     try:
         user_query = req.query
-        # Compose prompt for LLM (system prompt as string, not ChatPromptTemplate)
         system_prompt = (
             "Kamu adalah asisten helpdesk Epson bernama Eppy."
             "Wajib menggunakan tool retrieve_context untuk mencari informasi dari dokumen."
@@ -173,8 +172,8 @@ async def message(req: ChatRequest):
 @app.post("/embed")
 async def embed_document(req: EmbedRequest):
     try:
-        await sPipeline.add_new_document(req.article_id, req.title, req.file_path, col_name)
-        return {"success": True, "article_id": req.article_id, "embeddings_dimension": 768}
+        await sPipeline.add_new_document(req.article_id, req.title, req.s3_url, col_name)
+        return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error_code": "EMBED_FAILED", "message": str(e)})
 
@@ -182,7 +181,7 @@ async def embed_document(req: EmbedRequest):
 async def delete_embed(article_id: str):
     try:
         await sPipeline.delete_document_by_filename(article_id=article_id, collection_name=col_name)
-        return {"success": True, "article_id": article_id}
+        return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error_code": "DELETE_FAILED", "message": str(e)})
 
@@ -214,15 +213,15 @@ async def health_check():
 # Example usage
 # if __name__ == "__main__":
 #     async def main():
-        ## add & embedd doc test
+        # add & embedd doc test
         # await embed_document(EmbedRequest(
-        #     article_id="id_article_2",
-        #     title="DS-1730-12-13.pdf",
-        #     file_path="example_documents/DS-1730-12-13.pdf"
+        #     article_id="id_article_3",
+        #     title="DS-1730-15-16.pdf",
+        #     s3_url="example_documents/DS-1730-15-16.pdf"
         # ))
 
         ## delete doc test
-        # await delete_embed("id_article_1")
+        # await delete_embed("id_article_3")
 
         ## chat test
         # response = await message(ChatRequest(
@@ -241,7 +240,7 @@ async def health_check():
         # print("="*50)
         # print("\nIMAGE ANALYSES:")
         # for analysis in response['image_analyses']:
-            # print(f"  - {analysis}")
+        #     print(f"  - {analysis}")
 
         ## health check test
         # health = await health_check()

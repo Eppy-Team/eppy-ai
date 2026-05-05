@@ -3,12 +3,13 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Any, Optional
 
 from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.pipeline_options import PdfPipelineOptions, PictureDescriptionVlmOptions, PictureDescriptionApiOptions
+from docling.datamodel.pipeline_options import PdfPipelineOptions, PictureDescriptionVlmOptions
+# from docling.datamodel.pipeline_options import PictureDescriptionApiOptions
 from docling.datamodel.base_models import InputFormat
 from docling_core.transforms.serializer.base import BaseDocSerializer, SerializationResult
 from docling_core.transforms.serializer.common import create_ser_result
 from docling_core.transforms.serializer.markdown import MarkdownParams, MarkdownPictureSerializer, MarkdownDocSerializer
-from docling_core.types.doc.document import DoclingDocument, ImageRefMode, PictureDescriptionData, PictureItem
+from docling_core.types.doc.document import DoclingDocument, ImageRefMode, PictureItem
 
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFaceEndpointEmbeddings
@@ -25,10 +26,8 @@ _executor = ThreadPoolExecutor(max_workers=4)
 connection = os.getenv("CONNECTION_STRING")
 
 # API Keys
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 HF_API_TOKEN = os.getenv("HF_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 class AnnotationPictureSerializer(MarkdownPictureSerializer):
     @override
@@ -62,9 +61,8 @@ class AnnotationPictureSerializer(MarkdownPictureSerializer):
         return create_ser_result(text=text_res, span_source=item)
 
 class StorePipeline:
-    def __init__(self, db_url: str = connection, openai_api_key: str = OPENAI_API_KEY, hf_token: str = HF_API_TOKEN, groq_api_key: str = GROQ_API_KEY):
+    def __init__(self, db_url: str = connection, hf_token: str = HF_API_TOKEN, groq_api_key: str = GROQ_API_KEY):
         self.db_url = db_url
-        self.openai_api_key = openai_api_key
         self.hf_token = hf_token
         self.groq_api_key = groq_api_key
 
@@ -83,26 +81,26 @@ class StorePipeline:
         self.pipeline_options.do_ocr = True
 
         ## Example picture description options with a custom API
-        
-        self.pipeline_options.do_picture_description = True
-        self.pipeline_options.picture_description_options = PictureDescriptionApiOptions(
-            url="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-            headers={
-                "Authorization": f"Bearer {self.google_api_key}",
-            },
-            model="gemini-2.0-flash",
-            prompt="In this manual document for Epson products, analyze and describe the image in detail.",
-            timeout=30,
-        )
+        # self.pipeline_options.enable_remote_services = True
+        # self.pipeline_options.picture_description_options = PictureDescriptionApiOptions(
+        #     url="https://router.huggingface.co/v1/chat/completions",
+        #     headers={
+        #         "Authorization": f"Bearer {self.hf_token}",
+        #     },
+        #     model="meta-llama/Llama-3.2-11B-Vision-Instruct",  
+        #     prompt="In this manual document for Epson products, analyze and describe the image in detail.",
+        #     timeout=60,
+        # )
         
         # Alternative, a lightweight HuggingFace model for picture description
+        # self.pipeline_options.do_picture_description = True
         # self.pipeline_options.picture_description_options = PictureDescriptionVlmOptions(
         #     repo_id="HuggingFaceTB/SmolVLM-256M-Instruct",
         #     # repo_id="HuggingFaceTB/SmolVLM2-2.2B-Instruct",
         #     prompt="In this manual document for epson products, Analysis and Describe image in detail",
         # )
-        self.pipeline_options.generate_picture_images = True
-        self.pipeline_options.images_scale = 2.0
+        # self.pipeline_options.generate_picture_images = True
+        # self.pipeline_options.images_scale = 2.0
 
         self.converter = DocumentConverter(
             format_options={
@@ -118,9 +116,9 @@ class StorePipeline:
             use_jsonb=True,
         )
     
-    def _parse_document(self, file_path: str) -> str:
+    def _parse_document(self, s3_url: str) -> str:
         """Parse document using Docling with picture annotations."""
-        doc = self.converter.convert(file_path).document
+        doc = self.converter.convert(s3_url).document
         serializer = MarkdownDocSerializer(
             doc=doc,
             picture_serializer=AnnotationPictureSerializer(),
@@ -187,11 +185,11 @@ class StorePipeline:
             documents.append(Document(page_content=chunk.page_content, metadata=metadata))
         return documents
 
-    def _add_new_document(self, article_id: str, file_name: str, file_path: str, collection_name: str):
+    def _add_new_document(self, article_id: str, file_name: str, s3_url: str, collection_name: str):
         """Process a new document and add to vector store."""
         store = self._get_store(collection_name)
         # print(f"Parsing document: {file_name}")
-        markdown_content = self._parse_document(file_path)
+        markdown_content = self._parse_document(s3_url)
         # print("Chunking document...")
         chunks = self._chunk_document(markdown_content, file_name, article_id)
         ids = [str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{file_name}_chunk_{i}")) for i in range(len(chunks))]
@@ -220,9 +218,9 @@ class StorePipeline:
             # print(f"✓ Deleted {len(ids_to_delete)} chunks from document: {file_name}")
     
     #-- Async methods 
-    async def add_new_document(self, article_id: str, file_name: str, file_path: str, collection_name: str):
+    async def add_new_document(self, article_id: str, file_name: str, s3_url: str, collection_name: str):
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(_executor, self._add_new_document, article_id, file_name, file_path, collection_name)
+        return await loop.run_in_executor(_executor, self._add_new_document, article_id, file_name, s3_url, collection_name)
 
     async def delete_document_by_filename(self, article_id:str, collection_name: str):
         loop = asyncio.get_event_loop()

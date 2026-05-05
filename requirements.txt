@@ -7,7 +7,6 @@ langchain
 langchain-core
 langchain-postgres
 langchain-text-splitters
-langchain-classic
 
 # LangChain Integrations
 langchain-openai
@@ -18,16 +17,12 @@ langchain-huggingface
 pgvector
 psycopg[binary]
 
-# Document Parsing
-docling-slim
+# Document Parsing (Docling)
+docling
 docling-core
-
-# Embeddings via API (tanpa torch/transformers lokal)
-huggingface-hub
 
 # Environment
 python-dotenv
 
-# Pydantic
+# Pydantic (FastAPI dependency)
 pydantic
-sqlalchemy
