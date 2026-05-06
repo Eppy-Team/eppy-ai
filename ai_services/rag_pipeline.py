@@ -8,8 +8,7 @@ from ai_services.store_pipeline import StorePipeline
 from contextvars import ContextVar
 
 from langchain_groq import ChatGroq
-from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain.agents import create_agent
 from langchain.tools import tool
 
